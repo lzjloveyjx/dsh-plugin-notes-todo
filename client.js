@@ -11,7 +11,7 @@ window.__ModuleLoader__.load({
     const PANEL = 'notes-todo';
     const STORAGE_KEY = 'dsh.notes-todo.store.v3';
 
-    const S = {
+    const S_RAW = {
       root: {
         display: 'flex',
         flexDirection: 'column',
@@ -229,9 +229,11 @@ window.__ModuleLoader__.load({
       subRow: {},
       // Subtask cells are shorter than record cells: the empty ones carry no
       // padding, so the row height follows the single line of text only.
+      // Same rule colour as the record cells above it: a subtask row with a
+      // lighter line made the column edge look broken at every subtask.
       subCellBox: {
         position: 'relative',
-        borderRight: '1px solid var(--dsw-alias-border-l1)',
+        borderRight: '1px solid var(--dsw-alias-border-l2)',
         padding: '3px 8px',
         minWidth: 0,
         boxSizing: 'border-box',
@@ -271,17 +273,9 @@ window.__ModuleLoader__.load({
         background: 'transparent',
         zIndex: 3,
       },
-      // Visible hairline sitting where the resize handle is, so the column
-      // edge reads as draggable.
-      gripLine: {
-        position: 'absolute',
-        right: 3,
-        top: 2,
-        bottom: 2,
-        width: 1,
-        background: 'var(--dsw-alias-border-l2)',
-        pointerEvents: 'none',
-      },
+      // No second hairline here: the cell's own borderRight already marks the
+      // column edge. Drawing one at right:3 put two parallel lines 3px apart on
+      // every header cell, which read as a doubled, misaligned divider.
       // Excel-like cell: every cell carries its own right border and padding.
       cell: {
         position: 'relative',
@@ -314,10 +308,11 @@ window.__ModuleLoader__.load({
         overflow: 'hidden',
         background: 'var(--dsw-alias-bg-layer-1)',
       },
+      // No bottom border: every data row draws its own top rule, and two
+      // lines on one boundary read as a seam.
       tableHeadRow: {
         display: 'grid',
         gap: 0,
-        borderBottom: '1px solid var(--dsw-alias-border-l2)',
         boxSizing: 'border-box',
       },
       groupHead: {
@@ -507,13 +502,106 @@ window.__ModuleLoader__.load({
         cursor: 'pointer',
         whiteSpace: 'nowrap',
       },
+      exportWrap: { position: 'relative', display: 'inline-flex', alignItems: 'center' },
+      exportMenu: {
+        position: 'absolute',
+        right: 0,
+        top: 'calc(100% + 4px)',
+        zIndex: 40,
+        minWidth: 186,
+        padding: 4,
+        borderRadius: 8,
+        border: '1px solid var(--dsw-alias-border-l2)',
+        background: 'var(--dsw-alias-bg-layer-1)',
+        boxShadow: '0 12px 28px rgba(0, 0, 0, 0.28)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+      },
+      exportItem: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 2,
+        width: '100%',
+        padding: '6px 9px',
+        border: 'none',
+        borderRadius: 6,
+        background: 'transparent',
+        color: 'var(--dsw-alias-label-primary)',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        lineHeight: 1.4,
+        textAlign: 'left',
+        cursor: 'pointer',
+      },
+      exportItemHot: { background: 'var(--dsw-alias-bg-layer-2)' },
+      exportItemLabel: { fontSize: 12, color: 'var(--dsw-alias-label-primary)' },
+      exportItemHint: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)' },
     };
 
+    /** Numeric UI sizes become CSS calc()s, so one variable rescales the panel. */
+    const SIZE_KEYS = new Set([
+      'fontSize', 'gap', 'rowGap', 'columnGap',
+      'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+      'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
+      'minHeight', 'minWidth', 'borderRadius',
+    ]);
+    const scaleFactorOf = (value) => 'calc(' + value + 'px * var(--nt-scale, 1))';
+    function scaleLength(value) {
+      if (typeof value === 'number') return scaleFactorOf(value);
+      if (typeof value !== 'string') return value;
+      const tokens = value.trim().split(/\s+/);
+      if (tokens.length === 0) return value;
+      if (!tokens.every((token) => /^-?\d+(\.\d+)?(px)?$/.test(token))) return value;
+      return tokens.map((token) => (token === '0' || token === '0px' ? '0' : scaleFactorOf(Number.parseFloat(token)))).join(' ');
+    }
+    function buildStyleSheet(raw) {
+      const out = {};
+      for (const [key, style] of Object.entries(raw)) {
+        // A couple of slots are deliberately null ("no style"), keep them as-is.
+        if (style === null || typeof style !== 'object') {
+          out[key] = style;
+          continue;
+        }
+        const next = {};
+        for (const [prop, value] of Object.entries(style)) {
+          next[prop] = SIZE_KEYS.has(prop) ? scaleLength(value) : value;
+        }
+        out[key] = next;
+      }
+      return out;
+    }
+    const S = buildStyleSheet(S_RAW);
+
+    /** Saved size, or one guessed from the window: wide screens were getting 13px. */
+    const SCALE_KEY = 'dsh.notes-todo.uiScale';
+    function autoScale() {
+      const width = window.innerWidth || 1440;
+      const raw = width / 1440;
+      return Math.round(Math.max(1, Math.min(1.45, raw)) * 20) / 20;
+    }
+    function storedScale() {
+      try {
+        const value = Number.parseFloat(window.localStorage.getItem(SCALE_KEY) || '');
+        if (Number.isFinite(value) && value >= 0.85 && value <= 1.6) return value;
+      } catch {
+        /* private mode: fall through to the guess */
+      }
+      return autoScale();
+    }
+    function rememberScale(value) {
+      try {
+        window.localStorage.setItem(SCALE_KEY, String(value));
+      } catch {
+        /* private mode: the size still applies for this session */
+      }
+    }
     const FIELD_TYPE_LABEL = { text: '文本', datetime: '时间', select: '单选', multiselect: '多选', checkbox: '勾选', person: '人员' };
     /** Parsed from storage — keeps old checkbox/person fields readable. */
     const FIELD_TYPES = ['text', 'datetime', 'select', 'multiselect', 'checkbox', 'person'];
     /** Offered when adding a field. */
-    const NEW_FIELD_TYPES = ['text', 'datetime', 'select', 'multiselect'];
+    const NEW_FIELD_TYPES = ['text', 'datetime', 'select', 'multiselect', 'checkbox', 'person'];
     const VIEW_TYPE_LABEL = { table: '表格', board: '看板', calendar: '日历' };
 
     /** Types whose value is one option id from `options`. */
@@ -1008,6 +1096,501 @@ window.__ModuleLoader__.load({
         return true;
       }
 
+      /** Files land in the browser's download folder; the name is the view name. */
+      function safeName(raw) {
+        const clean = String(raw || '').replace(/[\\/:*?"<>|]+/g, '-').trim();
+        return clean === '' ? 'notes-todo' : clean.slice(0, 40);
+      }
+
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        window.setTimeout(() => {
+          URL.revokeObjectURL(url);
+          anchor.remove();
+        }, 400);
+      }
+
+      // ---------------------------------------------------------------------
+      // Excel export: a real .xlsx (a zip of five small XML parts) so it opens
+      // without the "different format" warning that CSV or SpreadsheetML cause.
+      // Everything is written as an inline string: dates and options are shown
+      // exactly as the table shows them, no re-interpretation by Excel.
+      // ---------------------------------------------------------------------
+      const CRC_TABLE = (function () {
+        const table = new Uint32Array(256);
+        for (let index = 0; index < 256; index += 1) {
+          let value = index;
+          for (let step = 0; step < 8; step += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+          table[index] = value >>> 0;
+        }
+        return table;
+      })();
+
+      function crc32(bytes) {
+        let crc = 0xffffffff;
+        for (let index = 0; index < bytes.length; index += 1) {
+          crc = CRC_TABLE[(crc ^ bytes[index]) & 0xff] ^ (crc >>> 8);
+        }
+        return (crc ^ 0xffffffff) >>> 0;
+      }
+
+      /** Stored (uncompressed) zip; xlsx allows it and it keeps this code small. */
+      function zipStore(entries) {
+        const encoder = new TextEncoder();
+        const body = [];
+        const index = [];
+        let offset = 0;
+        for (const entry of entries) {
+          const nameBytes = encoder.encode(entry.name);
+          const data = encoder.encode(entry.text);
+          const crc = crc32(data);
+          const local = new Uint8Array(30 + nameBytes.length);
+          const head = new DataView(local.buffer);
+          head.setUint32(0, 0x04034b50, true);
+          head.setUint16(4, 20, true);
+          head.setUint16(6, 0x0800, true);
+          head.setUint16(8, 0, true);
+          head.setUint16(10, 0, true);
+          head.setUint16(12, 0x21, true);
+          head.setUint32(14, crc, true);
+          head.setUint32(18, data.length, true);
+          head.setUint32(22, data.length, true);
+          head.setUint16(26, nameBytes.length, true);
+          head.setUint16(28, 0, true);
+          local.set(nameBytes, 30);
+          body.push(local, data);
+          index.push({ nameBytes: nameBytes, crc: crc, size: data.length, offset: offset });
+          offset += local.length + data.length;
+        }
+        const central = [];
+        let centralSize = 0;
+        for (const entry of index) {
+          const head = new Uint8Array(46 + entry.nameBytes.length);
+          const view = new DataView(head.buffer);
+          view.setUint32(0, 0x02014b50, true);
+          view.setUint16(4, 20, true);
+          view.setUint16(6, 20, true);
+          view.setUint16(8, 0x0800, true);
+          view.setUint16(10, 0, true);
+          view.setUint16(12, 0, true);
+          view.setUint16(14, 0x21, true);
+          view.setUint32(16, entry.crc, true);
+          view.setUint32(20, entry.size, true);
+          view.setUint32(24, entry.size, true);
+          view.setUint16(28, entry.nameBytes.length, true);
+          view.setUint16(30, 0, true);
+          view.setUint16(32, 0, true);
+          view.setUint16(34, 0, true);
+          view.setUint16(36, 0, true);
+          view.setUint32(38, 0, true);
+          view.setUint32(42, entry.offset, true);
+          head.set(entry.nameBytes, 46);
+          central.push(head);
+          centralSize += head.length;
+        }
+        const end = new Uint8Array(22);
+        const tail = new DataView(end.buffer);
+        tail.setUint32(0, 0x06054b50, true);
+        tail.setUint16(8, index.length, true);
+        tail.setUint16(10, index.length, true);
+        tail.setUint32(12, centralSize, true);
+        tail.setUint32(16, offset, true);
+        return new Blob(body.concat(central, [end]), {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+      }
+
+      function xmlEscape(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      /** Strip what Excel refuses in a sheet name, and cap at 31 characters. */
+      function sheetName(raw) {
+        const clean = String(raw || '').replace(/[\\/:*?\[\]]+/g, ' ').trim();
+        const safe = clean === '' ? '表' : clean;
+        return safe.slice(0, 31);
+      }
+
+      function columnLetter(index) {
+        let value = index + 1;
+        let label = '';
+        while (value > 0) {
+          const rest = (value - 1) % 26;
+          label = String.fromCharCode(65 + rest) + label;
+          value = Math.floor((value - 1) / 26);
+        }
+        return label;
+      }
+
+      /** Header row plus one row per record; subtask progress is appended. */
+      function viewXlsxBlob(store, view, rows) {
+        const fieldsById = {};
+        for (const field of store.fields) fieldsById[field.id] = field;
+        const fields = view.columns.map((column) => fieldsById[column.fieldId]).filter((field) => field !== undefined);
+        const matrix = [fields.map((field) => field.name).concat(['子任务'])];
+        for (const todo of rows) {
+          const line = fields.map((field) => cellText(field, todo.values[field.id]));
+          // The whole subtask list, not just 1/2: the sheet is what people take
+          // away from the panel, and the items are the part they need.
+          const subs = todo.subtasks || [];
+          line.push(subs.length === 0 ? '' : subtaskProgress(todo) + '：' + subs.map((sub) => (sub.done ? '✓ ' : '· ') + sub.text).join('；'));
+          matrix.push(line);
+        }
+        const cells = matrix
+          .map((line, rowIndex) => {
+            const inner = line
+              .map((value, columnIndex) => {
+                if (value === '' || value === '—') return '';
+                const ref = columnLetter(columnIndex) + String(rowIndex + 1);
+                return '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEscape(value) + '</t></is></c>';
+              })
+              .join('');
+            return '<row r="' + String(rowIndex + 1) + '">' + inner + '</row>';
+          })
+          .join('');
+        const sheet =
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+          '<sheetData>' + cells + '</sheetData></worksheet>';
+        const workbook =
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+          'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+          '<sheets><sheet name="' + xmlEscape(sheetName(view.name)) + '" sheetId="1" r:id="rId1"/></sheets></workbook>';
+        return zipStore([
+          {
+            name: '[Content_Types].xml',
+            text:
+              '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+              '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+              '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+              '<Default Extension="xml" ContentType="application/xml"/>' +
+              '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+              '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+              '</Types>',
+          },
+          {
+            name: '_rels/.rels',
+            text:
+              '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+              '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+              '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+              '</Relationships>',
+          },
+          { name: 'xl/workbook.xml', text: workbook },
+          {
+            name: 'xl/_rels/workbook.xml.rels',
+            text:
+              '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+              '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+              '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+              '</Relationships>',
+          },
+          { name: 'xl/worksheets/sheet1.xml', text: sheet },
+        ]);
+      }
+
+      /** Notes travel as Markdown; a struck-out note stays struck out. */
+      function notesMarkdown(notes) {
+        const sorted = notes.slice().sort(function (left, right) {
+          const a = String(right.updatedAt || right.createdAt);
+          const b = String(left.updatedAt || left.createdAt);
+          return a.localeCompare(b);
+        });
+        const lines = ['# 随笔', '', '共 ' + String(sorted.length) + ' 条 · 导出于 ' + new Date().toLocaleString('zh-CN'), ''];
+        for (const note of sorted) {
+          const when = shortTime(note.updatedAt || note.createdAt);
+          const body = String(note.text || '').trim();
+          lines.push('### ' + when, '', note.struck ? '~~' + body + '~~' : body, '');
+        }
+        if (sorted.length === 0) lines.push('（还没有随笔）', '');
+        return lines.join('\n');
+      }
+
+      /** Resolve a theme variable at export time so the image follows the theme. */
+      function colorOr(variable, fallback) {
+        try {
+          const value = getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+          return value === '' ? fallback : value;
+        } catch {
+          return fallback;
+        }
+      }
+
+      /** The panel paints on whatever the app has behind it; sample the nearest opaque one. */
+      function cardPalette(element) {
+        const fallback = { bg: '#141b25', text: '#e7eef8', muted: '#8ea2bb', border: 'rgba(150,178,214,0.28)' };
+        if (!element) return fallback;
+        let node = element;
+        let background = '';
+        while (node && node !== document.documentElement) {
+          const color = getComputedStyle(node).backgroundColor;
+          if (color && color !== 'transparent' && color.indexOf('rgba(0, 0, 0, 0)') < 0) {
+            background = color;
+            break;
+          }
+          node = node.parentElement;
+        }
+        if (background === '' || background.indexOf('rgba') >= 0) background = fallback.bg;
+        return {
+          bg: background,
+          text: getComputedStyle(element).color || fallback.text,
+          muted: colorOr('--dsw-alias-label-secondary', fallback.muted),
+          border: colorOr('--dsw-alias-border-light', fallback.border),
+        };
+      }
+
+      function isDarkColor(color) {
+        const hex = /^#([0-9a-f]{6})$/i.exec(String(color).trim());
+        if (hex !== null) {
+          const value = Number.parseInt(hex[1], 16);
+          const r = (value >> 16) & 255;
+          const g = (value >> 8) & 255;
+          const b = value & 255;
+          return (r * 299 + g * 587 + b * 114) / 1000 < 140;
+        }
+        const rgb = /rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/.exec(String(color));
+        if (rgb !== null) {
+          return (Number(rgb[1]) * 299 + Number(rgb[2]) * 587 + Number(rgb[3]) * 114) / 1000 < 140;
+        }
+        return true;
+      }
+
+      function drawRounded(paint, x, y, width, height, radius) {
+        const r = Math.min(radius, height / 2, width / 2);
+        paint.beginPath();
+        paint.moveTo(x + r, y);
+        paint.lineTo(x + width - r, y);
+        paint.quadraticCurveTo(x + width, y, x + width, y + r);
+        paint.lineTo(x + width, y + height - r);
+        paint.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+        paint.lineTo(x + r, y + height);
+        paint.quadraticCurveTo(x, y + height, x, y + height - r);
+        paint.lineTo(x, y + r);
+        paint.quadraticCurveTo(x, y, x + r, y);
+        paint.closePath();
+      }
+
+      function fitText(paint, value, max) {
+        if (paint.measureText(value).width <= max) return value;
+        let cut = value;
+        while (cut.length > 1 && paint.measureText(cut + '…').width > max) cut = cut.slice(0, -1);
+        return cut + '…';
+      }
+
+      /** Draw the view as a share card in the panel's own colours and chips. */
+      function viewPngBlob(store, view, rows, scale, element, done) {
+        const fieldsById = {};
+        for (const field of store.fields) fieldsById[field.id] = field;
+        const columns = view.columns
+          .map((column) => ({ field: fieldsById[column.fieldId], width: column.width }))
+          .filter((entry) => entry.field !== undefined)
+          .slice(0, 8);
+        if (columns.length === 0) {
+          done(null);
+          return;
+        }
+        const unit = Number.isFinite(scale) && scale > 0 ? scale : 1;
+        const palette = cardPalette(element);
+        const dark = isDarkColor(palette.bg);
+        const ratio = 2;
+        const width = 1180;
+        const pad = Math.round(28 * unit);
+        const titleSize = Math.round(19 * unit);
+        const metaSize = Math.round(12 * unit);
+        const headSize = Math.round(12 * unit);
+        const cellSize = Math.round(13 * unit);
+        const subSize = Math.round(11 * unit);
+        const rowHeight = Math.round(42 * unit);
+        const subHeight = Math.round(21 * unit);
+        const headerHeight = Math.round(38 * unit);
+        const titleBlock = Math.round(46 * unit);
+        const visible = rows.slice(0, 20);
+        const bodyHeight = visible.reduce((sum, todo) => sum + rowHeight + (todo.subtasks || []).length * subHeight, 0);
+        const height = titleBlock + Math.round(52 * unit) + headerHeight + bodyHeight + Math.round(46 * unit);
+        const canvas = document.createElement('canvas');
+        canvas.width = width * ratio;
+        canvas.height = Math.round(height * ratio);
+        const paint = canvas.getContext('2d');
+        if (paint === null) {
+          done(null);
+          return;
+        }
+        paint.scale(ratio, ratio);
+        const family = '"PingFang SC", "Microsoft YaHei", -apple-system, system-ui, sans-serif';
+        paint.fillStyle = palette.bg;
+        paint.fillRect(0, 0, width, height);
+        paint.strokeStyle = palette.border;
+        paint.lineWidth = 1;
+        paint.strokeRect(0.5, 0.5, width - 1, height - 1);
+        paint.textBaseline = 'middle';
+        paint.fillStyle = palette.text;
+        paint.font = '600 ' + titleSize + 'px ' + family;
+        paint.fillText(view.name, pad, pad + titleSize / 2);
+        paint.fillStyle = palette.muted;
+        paint.font = metaSize + 'px ' + family;
+        paint.fillText(rows.length + ' 行 · ' + new Date().toLocaleDateString('zh-CN') + ' · 随手记 · 待办', pad, pad + titleSize + Math.round(16 * unit));
+        const usable = width - pad * 2;
+        const rawWidths = columns.map((entry) => entry.width || 120);
+        const weight = rawWidths.reduce((sum, value) => sum + value, 0);
+        const widths = rawWidths.map((value) => Math.max(Math.round(64 * unit), Math.round((value / weight) * usable)));
+        const shrink = usable / widths.reduce((sum, value) => sum + value, 0);
+        for (let index = 0; index < widths.length; index += 1) widths[index] = Math.floor(widths[index] * shrink);
+        // Rounding down leaves a few pixels over; give them to the last column
+        // so the rules and the header band stop exactly at the card edge.
+        const leftover = usable - widths.reduce((sum, value) => sum + value, 0);
+        if (leftover > 0) widths[widths.length - 1] += leftover;
+        const tableTop = titleBlock + Math.round(52 * unit);
+        paint.fillStyle = dark ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.035)';
+        paint.fillRect(pad, tableTop, usable, headerHeight);
+        paint.textBaseline = 'middle';
+        let headX = pad;
+        for (let index = 0; index < columns.length; index += 1) {
+          paint.save();
+          paint.beginPath();
+          paint.rect(headX + 10, tableTop, widths[index] - 20, headerHeight);
+          paint.clip();
+          paint.fillStyle = palette.muted;
+          paint.font = '600 ' + headSize + 'px ' + family;
+          paint.fillText(columns[index].field.name, headX + 10, tableTop + headerHeight / 2);
+          paint.restore();
+          headX += widths[index];
+        }
+        let y = tableTop + headerHeight;
+        const chip = (hue, x, y0, label, maxWidth) => {
+          paint.font = '600 ' + Math.round(11 * unit) + 'px ' + family;
+          const text = fitText(paint, label, Math.max(20, maxWidth - Math.round(16 * unit)));
+          const boxWidth = Math.min(maxWidth, paint.measureText(text).width + Math.round(16 * unit));
+          drawRounded(paint, x, y0, boxWidth, Math.round(21 * unit), Math.round(6 * unit));
+          paint.fillStyle = 'hsla(' + hue + ', 52%, 55%, 0.18)';
+          paint.fill();
+          paint.strokeStyle = 'hsla(' + hue + ', 52%, 55%, 0.5)';
+          paint.lineWidth = 1;
+          paint.stroke();
+          paint.fillStyle = palette.text;
+          paint.fillText(text, x + Math.round(8 * unit), y0 + Math.round(21 * unit) / 2);
+          return boxWidth;
+        };
+        for (let rowIndex = 0; rowIndex < visible.length; rowIndex += 1) {
+          const todo = visible[rowIndex];
+          if (rowIndex % 2 === 1) {
+            paint.fillStyle = dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)';
+            paint.fillRect(pad, y, usable, rowHeight);
+          }
+          let cellX = pad;
+          for (let index = 0; index < columns.length; index += 1) {
+            const field = columns[index].field;
+            const value = todo.values[field.id];
+            const maxWidth = widths[index] - Math.round(20 * unit);
+            paint.save();
+            paint.beginPath();
+            paint.rect(cellX + 10, y, widths[index] - 20, rowHeight);
+            paint.clip();
+            if ((field.type === 'select' || field.type === 'person') && value) {
+              const optionIndex = (field.options || []).findIndex((option) => option.id === value);
+              const label = optionName(field, value);
+              if (label !== '') {
+                chip((Math.max(0, optionIndex) * 47 + 8) % 360, cellX + 10, y + (rowHeight - Math.round(21 * unit)) / 2, label, maxWidth);
+              }
+            } else if (field.type === 'multiselect' && Array.isArray(value) && value.length > 0) {
+              let chipX = cellX + 10;
+              for (let pick = 0; pick < Math.min(value.length, 2); pick += 1) {
+                const optionIndex = (field.options || []).findIndex((option) => option.id === value[pick]);
+                const label = optionName(field, value[pick]);
+                if (label === '') continue;
+                const room = Math.max(30, cellX + 10 + maxWidth - chipX);
+                chipX += chip((Math.max(0, optionIndex) * 47 + 8) % 360, chipX, y + (rowHeight - Math.round(21 * unit)) / 2, label, room) + Math.round(6 * unit);
+              }
+            } else if (field.type === 'checkbox') {
+              paint.fillStyle = value === true ? palette.text : palette.muted;
+              paint.font = cellSize + 'px ' + family;
+              paint.fillText(value === true ? '✓' : '—', cellX + 10, y + rowHeight / 2);
+            } else {
+              const shown = cellText(field, value);
+              paint.fillStyle = shown === '—' ? palette.muted : palette.text;
+              paint.font = cellSize + 'px ' + family;
+              paint.fillText(fitText(paint, String(shown), maxWidth), cellX + 10, y + rowHeight / 2);
+            }
+            paint.restore();
+            cellX += widths[index];
+          }
+          // A 1px band, not a stroked hairline: a 0.6px stroke lands between
+          // device pixels and renders as a broken, dashed-looking rule.
+          paint.fillStyle = palette.border;
+          paint.fillRect(pad, y + rowHeight, usable, 1);
+          y += rowHeight;
+          for (const sub of todo.subtasks || []) {
+            const boxSize = Math.round(11 * unit);
+            const boxX = pad + Math.round(18 * unit);
+            const boxY = y + Math.round((subHeight - boxSize) / 2);
+            drawRounded(paint, boxX, boxY, boxSize, boxSize, Math.round(3 * unit));
+            paint.fillStyle = sub.done ? palette.text : 'transparent';
+            if (sub.done) {
+              paint.fill();
+            } else {
+              paint.strokeStyle = palette.muted;
+              paint.lineWidth = 1;
+              paint.stroke();
+            }
+            if (sub.done) {
+              paint.strokeStyle = palette.bg;
+              paint.lineWidth = Math.max(1, Math.round(1.4 * unit));
+              paint.beginPath();
+              paint.moveTo(boxX + boxSize * 0.26, boxY + boxSize * 0.52);
+              paint.lineTo(boxX + boxSize * 0.44, boxY + boxSize * 0.7);
+              paint.lineTo(boxX + boxSize * 0.76, boxY + boxSize * 0.32);
+              paint.stroke();
+            }
+            paint.fillStyle = palette.muted;
+            paint.font = subSize + 'px ' + family;
+            paint.fillText(
+              fitText(paint, sub.text, usable - Math.round(48 * unit)),
+              boxX + boxSize + Math.round(6 * unit),
+              y + subHeight / 2,
+            );
+            y += subHeight;
+          }
+        }
+        if (rows.length > visible.length) {
+          paint.fillStyle = palette.muted;
+          paint.font = subSize + 'px ' + family;
+          paint.fillText('还有 ' + (rows.length - visible.length) + ' 行没画进来', pad, y + Math.round(14 * unit));
+        }
+        paint.fillStyle = palette.muted;
+        paint.font = subSize + 'px ' + family;
+        paint.fillText('notes-todo · 我在 DSH 里那张表', pad, height - Math.round(22 * unit));
+        canvas.toBlob((blob) => done(blob), 'image/png');
+      }
+
+
+      /** Cheap fingerprint of what is on screen, used to notice a host-side write. */
+      function storeSignature(store) {
+        if (!store) return '';
+        const stamp = (list) =>
+          list.reduce((last, item) => {
+            const value = String(item.updatedAt || '');
+            return value > last ? value : last;
+          }, '');
+        return [
+          store.fields.map((field) => field.id).join(','),
+          store.views.map((view) => view.id).join(','),
+          store.todos.length,
+          store.notes.length,
+          stamp(store.todos),
+          stamp(store.notes),
+        ].join('|');
+      }
+
       async function hostCall(endpoint, payload) {
         let connection;
         try {
@@ -1080,7 +1663,7 @@ window.__ModuleLoader__.load({
         return h(
           'div',
           { style: S.search },
-          h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, flex: '0 0 auto' } }, '⌕'),
+          h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(12px * var(--nt-scale, 1))', flex: '0 0 auto' } }, '⌕'),
           h('input', {
             style: S.searchInput,
             value: props.value,
@@ -2350,7 +2933,16 @@ window.__ModuleLoader__.load({
         const widthOf = (column) =>
           typeof liveWidth[column.fieldId] === 'number' ? liveWidth[column.fieldId] : column.width;
 
-        const template = columns.map((entry) => `${widthOf(entry.column)}px`).concat(['92px']).join(' ');
+        // Every track is minmax(width, <width>fr): the set width is the floor and
+        // leftover space is shared proportionally, so the row rules always reach
+        // the right edge instead of stopping short and looking chopped. Using a
+        // single 1fr for the last column would instead blow 操作 up to half the
+        // table on a wide panel.
+        const track = (width) => `minmax(${width}px, ${width}fr)`;
+        const template = columns
+          .map((entry) => track(widthOf(entry.column)))
+          .concat([track(92)])
+          .join(' ');
         const minWidth = columns.reduce((sum, entry) => sum + widthOf(entry.column), 92) + 20;
 
         const reorder = (fromId, toId) => {
@@ -2421,9 +3013,7 @@ window.__ModuleLoader__.load({
                 const sort = view.sorts.find((item) => item.fieldId === entry.field.id);
                 return sort ? h('span', { style: { flex: '0 0 auto' } }, sort.dir === 'asc' ? '↑' : '↓') : null;
               })(),
-              // A visible hairline plus a wide invisible handle: the edge is
-              // easy to find and easy to grab.
-              h('span', { style: S.gripLine }),
+              // One wide invisible handle: the cell border is the visual edge.
               h('span', {
                 style: S.grip,
                 title: '拖动改列宽',
@@ -2437,9 +3027,11 @@ window.__ModuleLoader__.load({
               }),
             ),
           ),
+          // cellLast, or this border doubles up with the table frame's own
+          // border and the right edge reads as a 2px double line.
           h(
             'div',
-            { style: Object.assign({}, S.headCell, { cursor: 'default' }) },
+            { style: Object.assign({}, S.headCell, S.cellLast, { cursor: 'default' }) },
             '操作',
           ),
         );
@@ -2551,7 +3143,11 @@ window.__ModuleLoader__.load({
                     display: 'grid',
                     gridTemplateColumns: template,
                     gap: 0,
-                    alignItems: 'start',
+                    // stretch, not start: a cell only paints its right border
+                    // as tall as itself, so a short cell (an empty 标签 column
+                    // next to a 标签 chip) cut the column rule mid-row and the
+                    // table looked torn along every vertical line.
+                    alignItems: 'stretch',
                   },
                 },
                 columns.map((entry, index) => {
@@ -3193,6 +3789,118 @@ window.__ModuleLoader__.load({
         );
       }
 
+      /** Three starting tables, so a first open is never an empty spreadsheet. */
+      const TEMPLATE_PRESETS = {
+        weekly: {
+          label: '周报',
+          fields: [
+            { name: '事项', type: 'text', primary: true },
+            { name: '状态', type: 'select', options: ['待办', '进行中', '完成'] },
+            { name: '本周重点', type: 'checkbox' },
+            { name: '截止', type: 'datetime' },
+            { name: '备注', type: 'text' },
+          ],
+          views: [
+            { name: '本周', type: 'table', columns: ['事项', '状态', '本周重点', '截止'], boardBy: null },
+            { name: '看板', type: 'board', columns: ['事项', '截止'], boardBy: '状态' },
+          ],
+          rows: [
+            { 事项: '把插件写进 README', 状态: '进行中', 本周重点: true, 截止: '2026-11-20', 备注: '加两张截图' },
+            { 事项: '补三个工具的测试', 状态: '完成', 本周重点: false },
+            { 事项: '拍 3 秒 demo', 状态: '待办', 本周重点: true, 截止: '2026-11-22' },
+          ],
+        },
+        ideas: {
+          label: '选题库',
+          fields: [
+            { name: '选题', type: 'text', primary: true },
+            { name: '类型', type: 'select', options: ['插件', '教程', '整活'] },
+            { name: '状态', type: 'select', options: ['草稿', '已拍', '已发'] },
+            { name: '平台', type: 'multiselect', options: ['B站', '抖音', '小红书'] },
+            { name: '开拍', type: 'checkbox' },
+          ],
+          views: [
+            { name: '选题库', type: 'table', columns: ['选题', '类型', '状态', '平台'], boardBy: null },
+            { name: '状态看板', type: 'board', columns: ['选题', '类型'], boardBy: '状态' },
+          ],
+          rows: [
+            { 选题: '在单位电脑上让 AI 写插件', 类型: '整活', 状态: '草稿', 平台: ['B站'], 开拍: true },
+            { 选题: 'AI 写 3900 行我要怎么审', 类型: '教程', 状态: '草稿', 平台: ['B站', '抖音'], 开拍: false },
+            { 选题: '插件赛道的 24 个对手', 类型: '插件', 状态: '已发', 平台: ['B站'] },
+          ],
+        },
+        watch: {
+          label: '追番',
+          fields: [
+            { name: '片名', type: 'text', primary: true },
+            { name: '状态', type: 'select', options: ['想看', '在看', '看完'] },
+            { name: '评分', type: 'text' },
+            { name: '看完', type: 'datetime' },
+          ],
+          views: [{ name: '追番', type: 'table', columns: ['片名', '状态', '评分', '看完'], boardBy: null }],
+          rows: [
+            { 片名: '示例：一部新番', 状态: '在看', 评分: '8.5' },
+            { 片名: '示例：另一部', 状态: '想看' },
+          ],
+        },
+      };
+
+      /** Turn a preset into fresh ids, so loading one twice cannot collide. */
+      function buildTemplate(preset) {
+        const fieldIds = {};
+        const optionIds = {};
+        const fields = preset.fields.map((entry) => {
+          const id = makeId('f');
+          fieldIds[entry.name] = id;
+          const field = { id, name: entry.name, type: entry.type };
+          if (entry.primary === true) field.primary = true;
+          if (entry.options) {
+            field.options = entry.options.map((name) => {
+              const optionId = makeId('o');
+              optionIds[entry.name + '/' + name] = optionId;
+              return { id: optionId, name };
+            });
+          }
+          return field;
+        });
+        const views = preset.views.map((entry) => ({
+          id: makeId('v'),
+          name: entry.name,
+          type: entry.type,
+          columns: (entry.columns || preset.fields.map((field) => field.name)).map((name, index) => ({
+            fieldId: fieldIds[name],
+            width: index === 0 ? 220 : 120,
+          })).filter((column) => column.fieldId !== undefined),
+          filters: [],
+          filterMode: 'and',
+          sorts: [],
+          groupBy: null,
+          boardBy: entry.boardBy ? fieldIds[entry.boardBy] || null : null,
+          dateField: null,
+          collapsed: [],
+        }));
+        const todos = preset.rows.map((row, index) => {
+          const values = {};
+          for (const field of fields) {
+            const raw = row[field.name];
+            if (raw === undefined) continue;
+            if (field.type === 'multiselect') {
+              values[field.id] = (Array.isArray(raw) ? raw : [])
+                .map((name) => optionIds[field.name + '/' + name])
+                .filter((value) => value !== undefined);
+            } else if (field.type === 'select' || field.type === 'person') {
+              values[field.id] = optionIds[field.name + '/' + raw] || '';
+            } else if (field.type === 'checkbox') {
+              values[field.id] = raw === true;
+            } else {
+              values[field.id] = String(raw);
+            }
+          }
+          const stamp = new Date(Date.now() - index * 1000).toISOString();
+          return { id: makeId('t'), values, subtasks: [], createdAt: stamp, updatedAt: stamp };
+        });
+        return { fields, views, todos };
+      }
       function Panel() {
         const [store, setStore] = React.useState(null);
         const [dataFile, setDataFile] = React.useState('');
@@ -3208,7 +3916,17 @@ window.__ModuleLoader__.load({
         const [savedAt, setSavedAt] = React.useState('');
         // Which kind of view the "add" menu is offering, or '' when closed.
         const [newType, setNewType] = React.useState('');
+        const rootRef = React.useRef(null);
+        const [uiScale, setUiScale] = React.useState(storedScale);
+        // The 导出 button opens a two-line menu; any outside click closes it.
+        const [exportOpen, setExportOpen] = React.useState(false);
+        // Switching tabs changes what can be exported, so the menu must not survive.
+        React.useEffect(() => {
+          setExportOpen(false);
+        }, [tab]);
         const storeRef = React.useRef(null);
+        // True while a save is in flight; the poll below stands down meanwhile.
+        const savingRef = React.useRef(false);
 
         React.useEffect(() => {
           let alive = true;
@@ -3276,6 +3994,7 @@ window.__ModuleLoader__.load({
           const previous = base;
           storeRef.current = target;
           setStore(target);
+          savingRef.current = true;
           setSaving(true);
           setError('');
           const localOk = writeLocalSoon(target);
@@ -3330,8 +4049,42 @@ window.__ModuleLoader__.load({
             setStore(previous);
             setError(`保存失败，已退回上一次保存的内容：${String((failure && failure.message) || failure)}`);
           } finally {
-            if (seq.current === mine) setSaving(false);
+            if (seq.current === mine) {
+              savingRef.current = false;
+              setSaving(false);
+            }
           }
+        }, []);
+
+        // The model writes rows through its tools, so the panel polls the host
+        // and adopts anything new. It never trades away local rows, and stands
+        // down while a save is in flight or the tab is hidden.
+        React.useEffect(() => {
+          let alive = true;
+          const tick = async () => {
+            if (!alive || document.hidden || savingRef.current) return;
+            let value = null;
+            try {
+              value = await hostCall('state');
+            } catch {
+              return;
+            }
+            if (!alive || !value || !value.store) return;
+            const mine = storeRef.current;
+            if (mine === null) return;
+            const remote = migrate(value.store);
+            if (storeSignature(remote) === storeSignature(mine)) return;
+            if (remote.notes.length + remote.todos.length < mine.notes.length + mine.todos.length) return;
+            storeRef.current = remote;
+            setStore(remote);
+            writeLocalSoon(remote);
+            if (value.dataFile) setDataFile(value.dataFile);
+          };
+          const timer = window.setInterval(tick, 4000);
+          return () => {
+            alive = false;
+            window.clearInterval(timer);
+          };
         }, []);
 
         const back = () => {
@@ -3345,6 +4098,51 @@ window.__ModuleLoader__.load({
         const views = store ? store.views : [];
         const activeView = views.find((view) => view.id === tab) || null;
         const activeKey = tab === 'notes' ? 'notes' : activeView ? tab : views.length > 0 ? views[0].id : 'notes';
+
+        const exportPng = () => {
+          if (!store || !activeView) return;
+          const rows = selectRows(store, activeView, query);
+          viewPngBlob(store, activeView, rows, uiScale, rootRef.current, (blob) => {
+            if (blob !== null) downloadBlob(blob, safeName(activeView.name) + '.png');
+          });
+        };
+
+        const exportXlsx = () => {
+          if (!store || !activeView) return;
+          const rows = selectRows(store, activeView, query);
+          downloadBlob(viewXlsxBlob(store, activeView, rows), safeName(activeView.name) + '.xlsx');
+        };
+
+        const exportMd = () => {
+          if (!store) return;
+          const notes = store.notes.filter((note) => noteMatchesQuery(note, query));
+          const blob = new Blob([notesMarkdown(notes)], { type: 'text/markdown;charset=utf-8' });
+          downloadBlob(blob, '随笔-' + new Date().toISOString().slice(0, 10) + '.md');
+        };
+
+        // One 导出 button, a short menu: the format depends on what is on screen.
+        // Built only while the menu is open, so filtering never runs per render.
+        const exportOptions = () => {
+          if (store === null) return [];
+          if (activeKey === 'notes') {
+            const count = store.notes.filter((note) => noteMatchesQuery(note, query)).length;
+            return [{ key: 'md', label: 'Markdown（.md）', hint: String(count) + ' 条，保留划线', run: exportMd }];
+          }
+          if (!activeView) return [];
+          const count = selectRows(store, activeView, query).length;
+          return [
+            { key: 'png', label: '图片（.png）', hint: '跟面板同色，前 20 行', run: exportPng },
+            { key: 'xlsx', label: 'Excel（.xlsx）', hint: '全部 ' + String(count) + ' 行，可继续编辑', run: exportXlsx },
+          ];
+        };
+
+        /** Two buttons instead of a settings page: the size is a personal thing. */
+        const changeScale = (delta) => {
+          const next = Math.round(Math.max(0.85, Math.min(1.6, uiScale + delta)) * 20) / 20;
+          rememberScale(next);
+          setUiScale(next);
+        };
+
 
         const addView = (type) => {
           const id = makeId('v');
@@ -3383,7 +4181,7 @@ window.__ModuleLoader__.load({
 
         return h(
           'div',
-          { style: S.root },
+          { ref: rootRef, style: Object.assign({}, S.root, { '--nt-scale': String(uiScale) }) },
           h(
             'div',
             { style: S.head },
@@ -3397,6 +4195,54 @@ window.__ModuleLoader__.load({
                   placeholder: activeKey === 'notes' ? '搜索随笔…' : '搜索待办…',
                 })
               : null,
+            h('button', { type: 'button', style: S.buttonGhost, title: '字号调小', onClick: () => changeScale(-0.1) }, 'A−'),
+            h('button', { type: 'button', style: S.buttonGhost, title: '字号调大', onClick: () => changeScale(0.1) }, 'A+'),
+            store === null
+              ? null
+              : h(
+                  'div',
+                  { style: S.exportWrap },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      style: S.buttonGhost,
+                      title: activeKey === 'notes' ? '导出随笔为 Markdown' : '导出当前视图',
+                      onClick: () => setExportOpen(!exportOpen),
+                    },
+                    '导出 ▾',
+                  ),
+                  exportOpen
+                    ? h(
+                        React.Fragment,
+                        null,
+                        h('div', {
+                          style: { position: 'fixed', inset: 0, zIndex: 30 },
+                          onClick: () => setExportOpen(false),
+                        }),
+                        h(
+                          'div',
+                          { style: S.exportMenu },
+                          exportOptions().map((option) =>
+                            h(
+                              'button',
+                              {
+                                key: option.key,
+                                type: 'button',
+                                style: S.exportItem,
+                                onClick: () => {
+                                  setExportOpen(false);
+                                  option.run();
+                                },
+                              },
+                              h('span', { style: S.exportItemLabel }, option.label),
+                              h('span', { style: S.exportItemHint }, option.hint),
+                            ),
+                          ),
+                        ),
+                      )
+                    : null,
+                ),
             h('button', { type: 'button', style: S.buttonGhost, onClick: back }, '返回会话'),
           ),
           h(
@@ -3447,6 +4293,32 @@ window.__ModuleLoader__.load({
                   )
               : null,
           ),
+          store && store.views.length === 0
+            ? h(
+                'div',
+                { style: { padding: '10px 16px 0' } },
+                h('div', { style: S.empty }, '还没有待办视图。先载入一张模板表，或者点上方「＋ 新建看法」自己搭：'),
+                h(
+                  'div',
+                  { style: Object.assign({}, S.row, { justifyContent: 'center' }) },
+                  Object.keys(TEMPLATE_PRESETS).map((key) =>
+                    h(
+                      'button',
+                      {
+                        key,
+                        type: 'button',
+                        style: S.button,
+                        onClick: () =>
+                          commit((current) =>
+                            Object.assign({}, current, buildTemplate(TEMPLATE_PRESETS[key])),
+                          ),
+                      },
+                      TEMPLATE_PRESETS[key].label,
+                    ),
+                  ),
+                ),
+              )
+            : null,
           error ? h('div', { style: S.error }, error) : null,
           store === null
             ? h('div', { style: S.body }, h('span', { style: S.meta }, error ? '读取失败' : '正在读取…'))
@@ -3461,7 +4333,30 @@ window.__ModuleLoader__.load({
                     query,
                     onViewDeleted: () => setTab('notes'),
                   })
-                : h('div', { style: S.body }, h('span', { style: S.meta }, '还没有待办视图，点上方「＋ 新建视图」。')),
+                : h(
+                    'div',
+                    { style: S.body },
+                    h('div', { style: S.empty }, '还没有待办视图。点上方「＋ 新建看法」，或者先载入一张模板表：'),
+                    h(
+                      'div',
+                      { style: Object.assign({}, S.row, { justifyContent: 'center' }) },
+                      Object.keys(TEMPLATE_PRESETS).map((key) =>
+                        h(
+                          'button',
+                          {
+                            key,
+                            type: 'button',
+                            style: S.button,
+                            onClick: () =>
+                              commit((current) =>
+                                Object.assign({}, current, buildTemplate(TEMPLATE_PRESETS[key])),
+                              ),
+                          },
+                          TEMPLATE_PRESETS[key].label,
+                        ),
+                      ),
+                    ),
+                  ),
           h('div', { style: S.foot }, h('span', { style: S.meta }, dataFile ? `已存到：${dataFile}` : '已存到浏览器本地副本')),
         );
       }
