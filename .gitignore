@@ -1,0 +1,34 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建产物与缓存
+dist/
+build/
+*.tsbuildinfo
+.cache/
+.tmp/
+
+# 日志
+*.log
+npm-debug.log*
+pnpm-debug.log*
+logs/
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 本地数据与备份
+*.bak
+*.backup
+store.json
+store.json.tmp
+
+# 环境变量（可能含密钥）
+.env
+.env.*
+!.env.example

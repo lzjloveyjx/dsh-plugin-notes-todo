@@ -1,0 +1,40 @@
+{
+  "name": "dsh-plugin-notes-todo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "左侧栏面板：随手记随笔（可编辑、可划线）与自定义字段的待办表格，支持自建表格/看板/日历视图、筛选、分组、子任务与搜索。",
+  "keywords": ["dsh", "dsh-plugin", "notes", "todo", "kanban", "table"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lzjloveyjx/dsh-plugin-notes-todo"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20",
+    "dsh": "^0.2.0-rc.1"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

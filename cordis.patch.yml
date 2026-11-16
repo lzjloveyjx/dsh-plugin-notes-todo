@@ -1,0 +1,4 @@
+- insert:
+    - id: notes-todo
+      name: 'dsh-plugin-notes-todo'
+      config: {}
