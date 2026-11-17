@@ -243,13 +243,46 @@ function walkTree(node, visit) {
   if (node.children) walkTree(node.children, visit);
   if (node.rendered) walkTree(node.rendered, visit);
 }
-if (tabLabel !== 'notes') {
-  let t = null;
+
+/** Every clickable button's rendered text, so a scene can name what it wants. */
+function buttonText(node) {
+  if (!node.props || !Array.isArray(node.props.children)) return '';
+  return node.props.children.filter((child) => typeof child === 'string').join('');
+}
+function findByPrefix(prefix) {
+  let hit = null;
   walkTree(tree, (node) => {
-    if (t) return;
-    if (node.type === 'button' && node.props && Array.isArray(node.props.children) && node.props.children.join('') === '全部待办') t = node;
+    if (hit) return;
+    if (node.type !== 'button' || typeof node.props.onClick !== 'function') return;
+    const text = buttonText(node);
+    if (text.startsWith(prefix) || text.indexOf(prefix) >= 0) hit = node;
   });
-  if (t) { t.props.onClick(); tree = await paint(); }
+  return hit;
+}
+async function clickSeq(names) {
+  for (const name of names) {
+    const hit = findByPrefix(name);
+    if (!hit) continue;
+    hit.props.onClick();
+    tree = await paint();
+  }
+}
+
+// A scene is a comma-separated list of things to click, in order.
+// `table` / `notes` keep their old meaning; anything else is matched by label.
+const SCENES = {
+  table: ['全部待办'],
+  notes: [],
+  board: ['全部待办', '待办状态分类'],
+  fields: ['全部待办', '字段管理'],
+  viewsettings: ['全部待办', '视图设置'],
+  export: ['全部待办', '导出 ▾'],
+  addtodo: ['全部待办', '添加待办'],
+  templates: [],
+};
+if (tabLabel !== 'notes') {
+  const scene = SCENES[tabLabel] || [tabLabel];
+  await clickSeq(scene);
 }
 const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   :root {
@@ -266,6 +299,10 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
   #stage { width: ${width}px; }
   button { font: inherit; }
+  /* A native select renders its first option; keep it legible on dark. */
+  select { color: #e7eef8; background: #1b2532; }
+  select option { background: #1b2532; color: #e7eef8; }
+  input::placeholder, textarea::placeholder { color: #6b7f97; }
 </style></head><body><div id="stage">${toHtml(tree)}</div></body></html>`;
 writeFileSync(process.argv[3] || 'preview.html', html, 'utf8');
 console.log('wrote', process.argv[3], html.length);

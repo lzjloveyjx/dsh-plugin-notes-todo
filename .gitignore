@@ -28,6 +28,10 @@ desktop.ini
 store.json
 store.json.tmp
 
+# 脚本产物（README 截图已经存进 docs/，这些是临时文件）
+card.html
+preview.html
+
 # 环境变量（可能含密钥）
 .env
 .env.*
