@@ -600,8 +600,8 @@ window.__ModuleLoader__.load({
     const FIELD_TYPE_LABEL = { text: '文本', datetime: '时间', select: '单选', multiselect: '多选', checkbox: '勾选', person: '人员' };
     /** Parsed from storage — keeps old checkbox/person fields readable. */
     const FIELD_TYPES = ['text', 'datetime', 'select', 'multiselect', 'checkbox', 'person'];
-    /** Offered when adding a field. */
-    const NEW_FIELD_TYPES = ['text', 'datetime', 'select', 'multiselect', 'checkbox', 'person'];
+    /** Offered when adding a field: only the four the panel can actually edit. */
+    const NEW_FIELD_TYPES = ['text', 'datetime', 'select', 'multiselect'];
     const VIEW_TYPE_LABEL = { table: '表格', board: '看板', calendar: '日历' };
 
     /** Types whose value is one option id from `options`. */
@@ -3796,18 +3796,17 @@ window.__ModuleLoader__.load({
           fields: [
             { name: '事项', type: 'text', primary: true },
             { name: '状态', type: 'select', options: ['待办', '进行中', '完成'] },
-            { name: '本周重点', type: 'checkbox' },
             { name: '截止', type: 'datetime' },
             { name: '备注', type: 'text' },
           ],
           views: [
-            { name: '本周', type: 'table', columns: ['事项', '状态', '本周重点', '截止'], boardBy: null },
+            { name: '本周', type: 'table', columns: ['事项', '状态', '截止'], boardBy: null },
             { name: '看板', type: 'board', columns: ['事项', '截止'], boardBy: '状态' },
           ],
           rows: [
-            { 事项: '把插件写进 README', 状态: '进行中', 本周重点: true, 截止: '2026-11-20', 备注: '加两张截图' },
-            { 事项: '补三个工具的测试', 状态: '完成', 本周重点: false },
-            { 事项: '拍 3 秒 demo', 状态: '待办', 本周重点: true, 截止: '2026-11-22' },
+            { 事项: '把插件写进 README', 状态: '进行中', 截止: '2026-11-20', 备注: '加两张截图' },
+            { 事项: '补三个工具的测试', 状态: '完成' },
+            { 事项: '拍 3 秒 demo', 状态: '待办', 截止: '2026-11-22' },
           ],
         },
         ideas: {
@@ -3817,15 +3816,14 @@ window.__ModuleLoader__.load({
             { name: '类型', type: 'select', options: ['插件', '教程', '整活'] },
             { name: '状态', type: 'select', options: ['草稿', '已拍', '已发'] },
             { name: '平台', type: 'multiselect', options: ['B站', '抖音', '小红书'] },
-            { name: '开拍', type: 'checkbox' },
           ],
           views: [
             { name: '选题库', type: 'table', columns: ['选题', '类型', '状态', '平台'], boardBy: null },
             { name: '状态看板', type: 'board', columns: ['选题', '类型'], boardBy: '状态' },
           ],
           rows: [
-            { 选题: '在单位电脑上让 AI 写插件', 类型: '整活', 状态: '草稿', 平台: ['B站'], 开拍: true },
-            { 选题: 'AI 写 3900 行我要怎么审', 类型: '教程', 状态: '草稿', 平台: ['B站', '抖音'], 开拍: false },
+            { 选题: '在单位电脑上让 AI 写插件', 类型: '整活', 状态: '草稿', 平台: ['B站'] },
+            { 选题: 'AI 写 3900 行我要怎么审', 类型: '教程', 状态: '草稿', 平台: ['B站', '抖音'] },
             { 选题: '插件赛道的 24 个对手', 类型: '插件', 状态: '已发', 平台: ['B站'] },
           ],
         },

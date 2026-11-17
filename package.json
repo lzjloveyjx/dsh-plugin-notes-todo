@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-notes-todo",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "private": true,
   "type": "module",
   "description": "左侧栏面板：随手记随笔（可编辑、可划线、导出 Markdown）与自定义字段的待办表格，支持自建表格/看板/日历视图、筛选、分组、子任务与搜索，可导出 PNG 分享卡或 xlsx 表格；并把这套表交给模型读写（notes_table_schema / notes_table_query / notes_table_upsert）。",
